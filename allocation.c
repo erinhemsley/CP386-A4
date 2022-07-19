@@ -1,6 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+things to do:
+--------------------
+memory alocation algs:
+-first fit
+-best fit
+-worst fit
+
+
+*/
 
 
 int main(int argv, char *arg[]){
