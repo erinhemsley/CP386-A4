@@ -17,12 +17,19 @@ memory alocation algs:
 
 typedef enum bool{false=0, true=1}bool;
 
-typedef struct command_struct{
-    char command[50];
+
+typedef struct chunk{
     int pid;
+    int start;
     int size;
-    char alg;
-}command_struct;
+}chunk;
+
+typedef struct memory{
+    int size;
+    chunk chunks[1000];
+}memory;
+
+
 
 
 int main(int argv, char *arg[]){
@@ -36,10 +43,13 @@ int main(int argv, char *arg[]){
     int inpv;
     char *inp[MAX_ARGS];
     char inp_buf[100];
-    command_struct command;
     char temp;
     int i;
     int j;
+
+    int pid;
+    int size;
+    char alg;
 
     for (i=0; i<MAX_ARGS; i++){
         inp[i] = malloc(sizeof(char) * 100);
@@ -65,7 +75,7 @@ int main(int argv, char *arg[]){
                 inpv++;
                 j=0;
             }else{
-                inp[inpv][j] = inp_buf[i];
+                inp[inpv][j] = tolower(inp_buf[i]);
                 j++;
             }
             i++;
@@ -73,19 +83,26 @@ int main(int argv, char *arg[]){
         if (j != 0){
             inp[inpv][j] = '\0';
             inpv++;
-        }
-
-        
-        for (i=0; i<inpv; i++){
-            printf("-%s\n", inp[i]);
-        }
-        
+        }        
         
 
-        if (strcmp("end", inp[0]) == 0){
+        if (strcmp("rq", inp[0]) == 0){
+            pid = atoi(&inp[1][1]);
+            size = atoi(inp[2]);
+            alg = inp[3][0];
+            
+            printf("%d\n", size);
+        }else if(strcmp("rl", inp[0]) == 0){
+            pid = atoi(&inp[1][1]);
+
+        }else if(strcmp("c", inp[0]) == 0){
+
+        }else if(strcmp("status", inp[0]) == 0){
+
+        }else if(strcmp("exit", inp[0]) == 0){
             end = true;
-        }else if(strcmp("end", inp[0]) == 0){
-
+        }else{
+            printf("invalid command\n");
         }
     }
 
