@@ -3,15 +3,6 @@
 #include <string.h>
 #include <ctype.h>
 
-/*
-things to do:
---------------------
-bugs: 
-    -if memory to be added is the exact size as the hole the hole will be changed 
-    to size 0 instead of deleting
-
-
-*/
 #define MAX_ARGS 10
 
 typedef enum bool{false=0, true=1}bool;
@@ -37,6 +28,7 @@ chunk *new_chunk(int pid, int start, int size, chunk *next);
 int first_fit(memory *mem, int pid, int size);
 int best_fit(memory *mem, int pid, int size);
 int worst_fit(memory *mem, int pid, int size);
+int compact(memory *mem);
 void pr_status(memory *mem);
 
 
@@ -99,7 +91,6 @@ int best_fit(memory *mem, int pid, int size){
     //returns 1 if successfully 0 if fail
     bool success = false;
     if (mem->free > size){
-        //printf("best: %d %d %d\n", mem->root->pid == -1, mem->root->size >= size, mem->chunks == 0);
         if (mem->root->pid == -1 && mem->root->size >= size && mem->chunks == 1){
             chunk *add = new_chunk(pid, 0, size, mem->root);
             mem->root->start += size;
@@ -128,6 +119,53 @@ int best_fit(memory *mem, int pid, int size){
             if (found_first){
                 chunk *add = new_chunk(pid, best->next->start, size, best->next);
                 best->next = add;
+                add->next->start += size;
+                add->next->size -= size;
+                success = true;
+            }
+        }
+    }
+    if (success){
+        mem->alocated += size;
+        mem->free -= size;
+        mem->chunks++;
+    }
+
+    return success;
+}
+
+int worst_fit(memory *mem, int pid, int size){
+    //returns 1 if successfully 0 if fail
+    bool success = false;
+    if (mem->free > size){
+        if (mem->root->pid == -1 && mem->root->size >= size && mem->chunks == 1){
+            chunk *add = new_chunk(pid, 0, size, mem->root);
+            mem->root->start += size;
+            mem->root->size -= size;
+            mem->root = add;
+            success = true;
+        }else{
+            chunk *pre = mem->root;
+            chunk *cur = pre->next;
+            chunk *worst = NULL;
+            bool found_first = false;
+
+            while (cur != NULL){
+                if (cur->pid == -1 && cur->size >= size){
+                    if (found_first && cur->size > worst->next->size){
+                        worst = pre;
+                    }else{
+                        worst = pre;
+                        found_first = true;
+                    }
+                    
+                }
+                pre = cur;
+                cur = cur->next;
+            }
+            if (found_first){
+                chunk *add = new_chunk(pid, worst->next->start, size, worst->next);
+                worst->next = add;
                 add->next->start += size;
                 add->next->size -= size;
                 success = true;
@@ -214,6 +252,43 @@ int release(memory *mem, int pid){
     return success;
 }
 
+int compact(memory *mem){
+    if (mem->chunks > 1){
+        chunk *cur = mem->root;
+        chunk *start = NULL;
+        chunk *end;
+        chunk *to_free;
+        bool added_first = false;
+
+        mem->chunks = 1;
+
+        while(cur != NULL){
+            if (cur->pid != -1){
+                mem->chunks++;
+                if (!added_first){
+                    start = cur;
+                    end = cur;
+                    start->start = 0;
+                    added_first = true;
+                }else{
+                    cur->start = end->start + end->size;
+                    end->next = cur;
+                    end = end->next;
+                }
+                cur = cur->next;
+            }else{
+                to_free = cur;
+                cur = cur->next;
+                free(to_free);
+            }        
+        }
+        //add final empty area
+        end->next = new_chunk(-1, end->start+end->size, mem->free, NULL);
+        mem->root = start;
+    }
+    return true;
+}
+
 void pr_status(memory *mem){
     chunk *cur = mem->root;
 
@@ -225,7 +300,7 @@ void pr_status(memory *mem){
         cur = cur->next;
     }
     printf("\n");
-    printf("Holes [Free memory = %d ]:\n", mem->free);
+    printf("Holes [Free memory = %d]:\n", mem->free);
     cur = mem->root;
     while (cur != NULL){
         if (cur->pid == -1){
@@ -245,6 +320,7 @@ int main(int argv, char *arg[]){
         exit(0);
     }
     bool end = false;
+    bool success;
 
     memory *mem;
     init_memory(&mem, atoi(arg[1]));
@@ -301,19 +377,17 @@ int main(int argv, char *arg[]){
             alg = inp[3][0];
 
             if (alg == 'f'){
-                if (first_fit(mem, pid, size)){
-                    printf("Successfully added %d to P%d\n", size, pid);
-                }else{
-                    printf("No hole of sufficient size\n");
-                }
+                success = first_fit(mem, pid, size);
             }else if (alg == 'b'){
-                if (best_fit(mem, pid, size)){
-                    printf("Successfully added %d to P%d\n", size, pid);
-                }else{
-                    printf("No hole of sufficient size\n");
-                }
+                success = best_fit(mem, pid, size);
             }else if (alg == 'w'){
-                //worst fit
+                success = worst_fit(mem, pid, size);
+            }
+
+            if (success){
+                printf("Successfully added %d to P%d\n", size, pid);
+            }else{
+                printf("No hole of sufficient size\n");
             }
         }else if(strcmp("rl", inp[0]) == 0){
             pid = atoi(&inp[1][1]);
@@ -325,7 +399,11 @@ int main(int argv, char *arg[]){
                 printf("Failed to releace memory for process P%d\n", pid);
             }
         }else if(strcmp("c", inp[0]) == 0){
-
+            if(compact(mem)){
+                printf("compact process successfull\n");
+            }else{
+                printf("compact process not successfull\n");
+            }
         }else if(strcmp("status", inp[0]) == 0){
             pr_status(mem);
         }else if(strcmp("exit", inp[0]) == 0){

@@ -1,0 +1,8 @@
+rq p1 100 b
+rq p2 50 b
+rq p3 100 b
+rl p3
+status
+c
+status
+exit
