@@ -6,10 +6,11 @@
 /*
 things to do:
 --------------------
-memory alocation algs:
--first fit
--best fit
--worst fit
+bugs: 
+    -if memory to be added is the exact size as the hole the hole will be changed 
+    to size 0 instead of deleting
+
+
 */
 #define MAX_ARGS 10
 
@@ -34,7 +35,8 @@ typedef struct memory{
 int init_memory(memory **mem, int size);
 chunk *new_chunk(int pid, int start, int size, chunk *next);
 int first_fit(memory *mem, int pid, int size);
-int first_fit(memory *mem, int pid, int size);
+int best_fit(memory *mem, int pid, int size);
+int worst_fit(memory *mem, int pid, int size);
 void pr_status(memory *mem);
 
 
@@ -62,7 +64,6 @@ int first_fit(memory *mem, int pid, int size){
     bool success = false;
     if (mem->free > size){
         if (mem->root->pid == -1 && mem->root->size >= size){
-            printf("9\n");
             chunk *add = new_chunk(pid, 0, size, mem->root);
             mem->root->start += size;
             mem->root->size -= size;
@@ -89,6 +90,125 @@ int first_fit(memory *mem, int pid, int size){
         mem->alocated += size;
         mem->free -= size;
         mem->chunks++;
+    }
+
+    return success;
+}
+
+int best_fit(memory *mem, int pid, int size){
+    //returns 1 if successfully 0 if fail
+    bool success = false;
+    if (mem->free > size){
+        //printf("best: %d %d %d\n", mem->root->pid == -1, mem->root->size >= size, mem->chunks == 0);
+        if (mem->root->pid == -1 && mem->root->size >= size && mem->chunks == 1){
+            chunk *add = new_chunk(pid, 0, size, mem->root);
+            mem->root->start += size;
+            mem->root->size -= size;
+            mem->root = add;
+            success = true;
+        }else{
+            chunk *pre = mem->root;
+            chunk *cur = pre->next;
+            chunk *best = NULL;
+            bool found_first = false;
+
+            while (cur != NULL){
+                if (cur->pid == -1 && cur->size >= size){
+                    if (found_first && cur->size < best->next->size){
+                        best = pre;
+                    }else{
+                        best = pre;
+                        found_first = true;
+                    }
+                    
+                }
+                pre = cur;
+                cur = cur->next;
+            }
+            if (found_first){
+                chunk *add = new_chunk(pid, best->next->start, size, best->next);
+                best->next = add;
+                add->next->start += size;
+                add->next->size -= size;
+                success = true;
+            }
+        }
+    }
+    if (success){
+        mem->alocated += size;
+        mem->free -= size;
+        mem->chunks++;
+    }
+
+    return success;
+}
+
+int release(memory *mem, int pid){
+    bool success = false;
+
+    chunk *remove;
+    chunk *prev_remove;
+    
+    if (mem->root->pid == pid){
+        remove = mem->root;
+        if (remove->next->pid == -1){
+            //combine with folowing free chunk
+            remove->next->start = remove->start;
+            remove->next->size += remove->start;
+            mem->root = mem->root->next;
+
+            mem->chunks -= 1;
+            mem->alocated -= remove->size;
+            mem->free += remove->size;
+
+            free(remove);
+        }else{
+            //make chunk free;
+            remove->pid = -1;
+            mem->alocated -= remove->size;
+            mem->free += remove->size;
+        }
+        success = true;
+    }else{
+        bool found = false;
+        prev_remove = mem->root;
+        remove = prev_remove->next;
+        while (remove != NULL && !found){
+            if (remove->pid == pid){
+                found = true;
+            }else{
+                prev_remove = remove;
+                remove = remove->next;
+            }
+        }
+        if (found){
+            mem->alocated -= remove->size;
+            mem->free += remove->size;
+            if (prev_remove->pid != -1 && remove->next->pid != -1){
+                //convert to free
+                remove->pid = -1;
+            }else{
+                if(remove->next->pid == -1){
+                    //combine with next
+                    remove->next->start = remove->start;
+                    remove->next->size += remove->start;
+                    prev_remove->next = remove->next;
+                    
+                    mem->chunks -= 1;
+                    free(remove);
+                    remove = prev_remove->next;
+                }
+                if (prev_remove->pid == -1){
+                    //combine with prev
+                    prev_remove->next = remove->next;
+                    prev_remove->size += remove->size;
+
+                    mem->chunks -= 1;
+                    free(remove);
+                }     
+            }
+            success = true;
+        }
     }
 
     return success;
@@ -146,13 +266,7 @@ int main(int argv, char *arg[]){
         inp[i] = malloc(sizeof(char) * 100);
     }
 
-
     printf("Allocated %d bytes of memory\n", mem->size);
-
-    pr_status(mem);
-    first_fit(mem, 1, 100);
-    pr_status(mem);
-
 
     while(!end){
         printf("command>");
@@ -185,19 +299,39 @@ int main(int argv, char *arg[]){
             pid = atoi(&inp[1][1]);
             size = atoi(inp[2]);
             alg = inp[3][0];
-            
-            printf("%d\n", size);
+
+            if (alg == 'f'){
+                if (first_fit(mem, pid, size)){
+                    printf("Successfully added %d to P%d\n", size, pid);
+                }else{
+                    printf("No hole of sufficient size\n");
+                }
+            }else if (alg == 'b'){
+                if (best_fit(mem, pid, size)){
+                    printf("Successfully added %d to P%d\n", size, pid);
+                }else{
+                    printf("No hole of sufficient size\n");
+                }
+            }else if (alg == 'w'){
+                //worst fit
+            }
         }else if(strcmp("rl", inp[0]) == 0){
             pid = atoi(&inp[1][1]);
 
+            printf("Releasing memory for process P%d\n", pid);
+            if(release(mem, pid)){
+                printf("Successfully releaced memory for process P%d\n", pid);
+            }else{
+                printf("Failed to releace memory for process P%d\n", pid);
+            }
         }else if(strcmp("c", inp[0]) == 0){
 
         }else if(strcmp("status", inp[0]) == 0){
-
+            pr_status(mem);
         }else if(strcmp("exit", inp[0]) == 0){
             end = true;
         }else{
-            printf("invalid command\n");
+            printf("invalid command '%s'\n", inp_buf);
         }
     }
 

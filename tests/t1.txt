@@ -1,0 +1,9 @@
+rq p1 100 f
+rq p2 100 f
+rq p3 100 f
+status 
+rl p2 
+status
+rl p3
+status
+exit
